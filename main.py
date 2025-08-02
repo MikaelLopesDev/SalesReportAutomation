@@ -4,6 +4,7 @@ import numpy as np
 from datetime import datetime
 import requests
 from decimal import Decimal, ROUND_HALF_UP
+import re
 
 # Define the names of the additional columns
 columns_to_add = [
@@ -15,6 +16,10 @@ columns_to_add = [
     'Location/State',
     'ERRORS_FOUND'
 ]
+
+def verify_formate_vendor_id(vendor_id):
+    default  = r'^[A-Za-z]{2}\d{6}$'  # 2 letras + 6 números
+    return bool(re.fullmatch(default, vendor_id))
 
 def currency_convertion(id_currency):
     url = f"http://economia.awesomeapi.com.br/json/last/{id_currency}-BRL"
@@ -32,6 +37,20 @@ def currency_convertion(id_currency):
         print(f"Error in currency conversion: {e}")
         return 0.0
 
+def find_address_by_postal_code(postal_code):
+    url = f"https://viacep.com.br/ws/{postal_code}/json/"
+
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        return data
+    except (requests.exceptions.RequestException, ValueError, KeyError) as e:
+        print(f"Error in finding adress by postal code: {e}")
+        return 0
+
+
 def parse_date(date_str):
     know_formats_dates = [
         "%d/%m/%Y",  # dd/MM/yyyy
@@ -42,7 +61,12 @@ def parse_date(date_str):
     for fmt in know_formats_dates:
         try:
             parsed_date = datetime.strptime(str(date_str), fmt)
-            return parsed_date.strftime("%d/%m/%Y")  # Correct: strftime (not strftim)
+            if parsed_date > datetime.strptime(str("01/01/2018"), fmt) and parsed_date < datetime.strptime(
+                    str("01/01/2022"), fmt):
+                return parsed_date.strftime("%d/%m/%Y")  # Correct: strftime (not strftim)
+            else:
+                return 1
+
         except ValueError:
             continue
     return 0
@@ -63,10 +87,18 @@ for index, row in df_sales_list.iterrows():
     if not str(row['INVOICE']).strip().isdigit():
         df_sales_list.at[index, 'ERRORS_FOUND'] = "Erro: Número da Fatura contém letras e deve ser apenas números"
 
-    if parse_date(str(row['DATE']).strip()) != 0:
-        df_sales_list.at[index, 'DATE'] = parse_date(str(row['DATE']).strip())
+    if parse_date(str(row['DATE']).strip()) == 0:
+        df_sales_list.at[index, 'ERRORS_FOUND'] = str(
+            df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: Número da Fatura contém data inválida"
+    elif parse_date(str(row['DATE']).strip()) == 1:
+        df_sales_list.at[index, 'ERRORS_FOUND'] = str(df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: Data fora do intervalo de 2018 a 2021"
     else:
-        df_sales_list.at[index, 'ERRORS_FOUND'] = str(df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: Número da Fatura contém data inválida"
+        df_sales_list.at[index, 'DATE'] = parse_date(str(row['DATE']).strip())
+
+    if not verify_formate_vendor_id(str(row['VENDOR ID']).strip()):
+        df_sales_list.at[index, 'ERRORS_FOUND'] = str(
+            df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: VerdorID fora do formato AA000000"
+
 
     if df_vendor_list.loc[df_vendor_list["Vendor ID"] == str(row['VENDOR ID']).strip(), "Status"].eq("Pending Registration").any():
         df_sales_list.at[index, 'ERRORS_FOUND'] = str(df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: Vendor ID Possui Pending Registration"
@@ -84,7 +116,21 @@ for index, row in df_sales_list.iterrows():
         df_sales_list.at[index, 'ERRORS_FOUND'] = str(df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: Não foi possivel converter a moeda para BRL"
     else:
         df_sales_list.at[index, 'Total Price (BRL)'] = Decimal(str(row['TOTAL PRICE']).split()[0]).quantize(Decimal('0.00'), rounding=ROUND_HALF_UP) * convert_unit_cost
+
     df_sales_list.at[index, 'Exchange Conversion Date/Time'] = datetime.now().strftime("%d/%m/%Y")
+
+    adresses = find_address_by_postal_code(str(row['POSTAL CODE']).strip())
+    if adresses == 0:
+        df_sales_list.at[index, 'ERRORS_FOUND'] = str(
+            df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: Não foi possivel Encontrar endereço válido para o cep"
+    else:
+        df_sales_list.at[index, 'Address'] = f"{str(adresses['logradouro'])} {str(adresses['complemento'])}"
+        df_sales_list.at[index, 'Neighborhood'] = f"{str(adresses['bairro'])}"
+        df_sales_list.at[index, 'Location/State'] = f"{str(adresses['estado'])}"
+
+
+
+
 
 
 df_sales_list.to_excel("Data/Output/Sales List.xlsx", index=False)
