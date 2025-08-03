@@ -5,17 +5,10 @@ from datetime import datetime
 import requests
 from decimal import Decimal, ROUND_HALF_UP
 import re
+from openpyxl import load_workbook
+import os
+import shutil
 
-# Define the names of the additional columns
-columns_to_add = [
-    'Unit Cost (BRL)',
-    'Total Price (BRL)',
-    'Exchange Conversion Date/Time',
-    'Address',
-    'Neighborhood',
-    'Location/State',
-    'ERRORS_FOUND'
-]
 
 def verify_formate_vendor_id(vendor_id):
     default  = r'^[A-Za-z]{2}\d{6}$'  # 2 letras + 6 números
@@ -71,6 +64,44 @@ def parse_date(date_str):
             continue
     return 0
 
+dict_tax_by_state = {
+    "São Paulo": "0.05",
+    "Rio de Janeiro": "0.02",
+    "Minas Gerais": "0.01"
+
+
+}
+
+dict_position_cell = {
+    "idVendorPositionTemplate":"B7",
+    "dateTodayPostionTemplate":"C7",
+    "vendorNamePositionTemplate":"B9",
+    "streetPositionTemplate":"B10",
+    "districtCityStatePositionTemplate":"B11",
+    "phoneNumberPostionTemplate":"B12",
+    "emailPostionTemplate":"B13",
+    "discountPostionTemplate":"G28",
+    "unitCostBrlFirstPostionTemplate":"D18",
+    "qtyPostionTemplate" : "E18",
+    "termPostionTemplate":"B35",
+}
+
+# Define the names of the additional columns
+columns_to_add = [
+    'Unit Cost (BRL)',
+    'Total Price (BRL)',
+    'Exchange Conversion Date/Time',
+    'Address',
+    'Neighborhood',
+    'Location/State',
+    'ERRORS_FOUND'
+]
+
+
+wb = load_workbook("Data/Input/Sales Report_Template.xlsx")
+ws = wb.active  # Pega a planilha ativa
+
+path_report_template = "Data/Input/Sales Report_Template.xlsx"
 df_vendor_list = pd.read_excel("Data/Input/Vendor List.xlsx")
 
 table_sales_list = camelot.read_pdf("Data/Input/Sales List.pdf")
@@ -129,7 +160,20 @@ for index, row in df_sales_list.iterrows():
         df_sales_list.at[index, 'Location/State'] = f"{str(adresses['estado'])}"
 
 
+df_sales_list_clean = df_sales_list[
+    df_sales_list['ERRORS_FOUND'].isna()]
 
+list_vendor_id = df_sales_list_clean['VENDOR ID'].unique()
+
+
+
+for vendor_id in list_vendor_id:
+    shutil.copy(path_report_template, f"Data/Output/{vendor_id}.xlsx")
+    df_report_by_vendor_id = df_sales_list_clean[
+        df_sales_list_clean['VENDOR ID'] == vendor_id]
+    total_sum_sales = df_report_by_vendor_id['Total Price (BRL)'].sum()
+    discount = 0.10 if total_sum_sales > 2000000 else 0.0
+    taxa = dict_tax_by_state[str(df_report_by_vendor_id['Location/State'].iloc[0])] #should added handling possible input erro
 
 
 
