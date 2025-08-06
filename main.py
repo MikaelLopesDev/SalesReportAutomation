@@ -9,6 +9,27 @@ from openpyxl import load_workbook
 import shutil
 import win32com.client
 import os
+from PyPDF2 import PdfReader, PdfWriter
+import smtplib
+
+
+
+def set_pdf_password(input_pdf, output_pdf, password):
+    # read original pdf
+    reader = PdfReader(input_pdf)
+    writer = PdfWriter()
+
+    # ADD ALL PAGES TO WRITER
+    for page in reader.pages:
+        writer.add_page(page)
+
+    # Set PDF with password
+    writer.encrypt(user_password=password, owner_password=None,
+                   use_128bit=True)
+
+    # SAVE THE NEW PDF PROTECT
+    with open(output_pdf, "wb") as f:
+        writer.write(f)
 
 
 def verify_formate_vendor_id(vendor_id):
@@ -65,6 +86,26 @@ def parse_date(date_str):
             continue
     return 0
 
+vba_code = """
+Sub AdjustSheetToExportAsPDF()
+    With ActiveSheet
+
+        .Cells.EntireColumn.AutoFit
+
+        .Columns("B").ColumnWidth = 48
+        .Columns("D").ColumnWidth = 18
+        .Columns("E").ColumnWidth = 6
+        .Columns("G").ColumnWidth = 20
+
+        With .PageSetup
+            .Zoom = False
+            .FitToPagesWide = 1
+            .FitToPagesTall = 1
+        End With
+    End With
+End Sub
+"""
+
 dict_tax_by_state = {
     "São Paulo": "0,05",
     "Rio de Janeiro": "0,02",
@@ -100,7 +141,7 @@ columns_to_add = [
 ]
 
 
-
+list_files_report = []
 path_report_template = "Data/Input/Sales Report_Template.xlsx"
 df_vendor_list = pd.read_excel("Data/Input/Vendor List.xlsx")
 
@@ -202,28 +243,37 @@ for vendor_id in list_vendor_id:
         sales_report_vendor_id_sheet[f"{start_colum_unit_costbrl}{start_index_row_costbrl_and_quant+index}"] = round(float(row['Unit Cost (BRL)']),2)
         sales_report_vendor_id_sheet[f"{start_colum_quant}{start_index_row_costbrl_and_quant+index}"] = round(float(row['QTY']),2)
 
-    sales_report_vendor_id.save(output_vendor_id_report)  # ✨ Isso sobrescreve o arquivo original!
+    sales_report_vendor_id.save(output_vendor_id_report)
 
+    path_pdf_without_password = output_vendor_id_report.replace(".xlsx","temp.pdf")
+    path_pdf_with_password = output_vendor_id_report.replace(".xlsx", ".pdf")
     #Create PDF File
     excel = win32com.client.Dispatch("Excel.Application")
-    excel.Visible = False  # Executar em segundo plano
+    excel.Visible = False  # Execute in second plan
     workbook = excel.Workbooks.Open(os.path.abspath(output_vendor_id_report))
-    workbook.ExportAsFixedFormat(0, os.path.abspath(output_vendor_id_report.replace(".xlsx",".pdf")))  # 0 = PDF
-    workbook.Close()
+    vba_module = workbook.VBProject.VBComponents.Add(1)  # 1 = Módulo padrão
+    vba_module.CodeModule.AddFromString(vba_code)
+    excel.Application.Run("AdjustSheetToExportAsPDF")
+    workbook.ExportAsFixedFormat(0, os.path.abspath(path_pdf_without_password))  # 0 = PDF
+    workbook.Close(SaveChanges=True)
     excel.Quit()
-
-
-
-
+    set_pdf_password(path_pdf_without_password,path_pdf_with_password,re.sub(r'\D', '', vendor_id))
+    list_files_report.append(path_pdf_with_password)
 
 
 df_sales_list.to_excel("Data/Output/Sales List.xlsx", index=False)
 
-valid_errors = df_sales_list[
+df_valid_errors = df_sales_list[
     df_sales_list['ERRORS_FOUND'].notna() &
     (df_sales_list['ERRORS_FOUND'].str.strip() != '')
 ]
 
-print(valid_errors)
+
+df_valid_errors.to_excel("Data/Output/Errors Found.xlsx", index=False)
+list_files_report.append("Data/Output/Errors Found.xlsx")
+
+smtplib.SMTP('smtp-relay.brevo.com', 587)
+
+print(list_files_report)
 
 
