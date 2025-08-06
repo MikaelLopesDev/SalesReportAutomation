@@ -11,12 +11,7 @@ import win32com.client
 from dotenv import load_dotenv
 import os
 from PyPDF2 import PdfReader, PdfWriter
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
-
+import sendEmails
 
 def set_pdf_password(input_pdf, output_pdf, password):
     # read original pdf
@@ -90,68 +85,6 @@ def parse_date(date_str):
             continue
     return 0
 
-
-
-def enviar_email_com_anexos(
-        remetente: str,
-        senha: str,
-        destinatarios: list,
-        assunto: str,
-        corpo: str,
-        anexos: list,
-        servidor_smtp: str = "smtp.gmail.com",
-        porta: int = 587
-):
-    """
-    Envia e-mail com múltiplos anexos usando SMTP.
-
-    Args:
-        remetente (str): E-mail do remetente
-        senha (str): Senha do e-mail ou senha de app
-        destinatarios (list): Lista de e-mails dos destinatários
-        assunto (str): Assunto do e-mail
-        corpo (str): Corpo do e-mail (pode ser HTML)
-        anexos (list): Lista de caminhos dos arquivos para anexar
-        servidor_smtp (str): Servidor SMTP (padrão: Gmail)
-        porta (int): Porta SMTP (padrão: 587 para TLS)
-    """
-
-    # Criar mensagem
-    msg = MIMEMultipart()
-    msg['From'] = remetente
-    msg['To'] = ", ".join(destinatarios)
-    msg['Subject'] = assunto
-
-    # Adicionar corpo do e-mail
-    msg.attach(MIMEText(corpo, 'plain'))  # Use 'html' para formato HTML
-
-    # Adicionar anexos
-    for caminho_anexo in anexos:
-        try:
-            with open(caminho_anexo, 'rb') as arquivo:
-                part = MIMEBase('application', 'octet-stream')
-                part.set_payload(arquivo.read())
-                encoders.encode_base64(part)
-                part.add_header(
-                    'Content-Disposition',
-                    f'attachment; filename= {caminho_anexo.split("/")[-1]}'
-                )
-                msg.attach(part)
-        except FileNotFoundError:
-            print(f"Erro: Arquivo não encontrado - {caminho_anexo}")
-            continue
-
-    # Enviar e-mail
-    try:
-        with smtplib.SMTP(servidor_smtp, porta) as server:
-            server.starttls()  # Ativar TLS
-            server.login(remetente, senha)
-            server.sendmail(remetente, destinatarios, msg.as_string())
-        print("E-mail enviado com sucesso!")
-    except Exception as e:
-        print(f"Falha ao enviar e-mail: {str(e)}")
-
-
 vba_code = """
 Sub AdjustSheetToExportAsPDF()
     With ActiveSheet
@@ -208,7 +141,7 @@ columns_to_add = [
 
 load_dotenv()
 password_email = os.getenv("EMAIL_PASSWORD")
-list_files_report = []
+email = sendEmails.EmailSender(smtp_server="smtp.gmail.com",smtp_port=587, sender_email="mikaellopes777@gmail.com",sender_password= password_email)
 path_report_template = "Data/Input/Sales Report_Template.xlsx"
 df_vendor_list = pd.read_excel("Data/Input/Vendor List.xlsx")
 
@@ -325,7 +258,7 @@ for vendor_id in list_vendor_id:
     workbook.Close(SaveChanges=True)
     excel.Quit()
     set_pdf_password(path_pdf_without_password,path_pdf_with_password,re.sub(r'\D', '', vendor_id))
-    list_files_report.append(path_pdf_with_password)
+    email.add_attachment(path_pdf_with_password)
 
 
 df_sales_list.to_excel("Data/Output/Sales List.xlsx", index=False)
@@ -337,20 +270,15 @@ df_valid_errors = df_sales_list[
 
 
 df_valid_errors.to_excel("Data/Output/Errors Found.xlsx", index=False)
-list_files_report.append("Data/Output/Errors Found.xlsx")
+email.add_attachment("Data/Output/Errors Found.xlsx")
 
 
-enviar_email_com_anexos(
-        remetente="mikaellopes777@gmail.com",
-        senha=password_email,  # Use senha de app se tiver 2FA ativado
-        destinatarios=["mikaelslopesit@gmail.com"],
-        assunto="Relatório Mensal",
-        corpo="Follow the invoices and report in the attachments.",
-        anexos= list_files_report,
-        servidor_smtp="smtp.gmail.com",
-        porta=587
+email.send_email(
+        recipient_email="mikaelslopesit@gmail.com",
+        subject="Relatório Mensal",
+        body="Follow the invoices and report in the attachments.",
     )
 
-print(list_files_report)
+
 
 
