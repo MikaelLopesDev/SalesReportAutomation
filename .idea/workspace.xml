@@ -5,36 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="d70b954a-803c-4d29-adc9-cca389629430" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/Data/Input/VbaAdjustSheetFormat.vb" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Data/config.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/DE325476.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/DE325476.xlsx" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/DE325476temp.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/DE767565.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/DE767565.xlsx" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/DE767565temp.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/Errors Found.xlsx" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/FR065748.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/FR065748.xlsx" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/FR065748temp.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/IT145632.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/IT145632.xlsx" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/IT145632temp.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/IT754893.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/IT754893.xlsx" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/IT754893temp.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/RO094782.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/RO094782.xlsx" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/RO094782temp.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/RO125678.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/RO125678.xlsx" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/RO125678temp.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/RU567434.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/RU567434.xlsx" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/RU567434temp.pdf" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Data/Output/Sales List.xlsx" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -62,17 +33,17 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "Python.main.executor": "Debug",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
-    "git-widget-placeholder": "dev",
-    "last_opened_file_path": "C:/Users/reppl/OneDrive/Área de Trabalho/100DaysOfPython/Projeto-CaseNubank-Python"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python.main.executor&quot;: &quot;Debug&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;dev&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/reppl/OneDrive/Área de Trabalho/100DaysOfPython/Projeto-CaseNubank-Python&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="C:\Users\reppl\OneDrive\Área de Trabalho\100DaysOfPython\Projeto-CaseNubank-Python\Data" />
