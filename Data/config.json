@@ -1,0 +1,51 @@
+{
+  "path_report_template":"Data/Input/Sales Report_Template.xlsx",
+  "path_vendor_list": "Data/Input/Vendor List.xlsx",
+  "path_sales_list_pdf": "Data/Input/Sales List.pdf",
+  "path_report_errors_found": "Data/Output/Errors Found.xlsx",
+  "path_vendor_id_report": "Data/Output/{0}.xlsx",
+
+  "email_smtp": "smtp.gmail.com",
+  "email_port": "587",
+  "email_sender": "mikaellopes777@gmail.com",
+  "email_recipient": "mikaelslopesit@gmail.com",
+  "email_subject": "Relatório Mensal",
+  "email_body": "Follow the invoices and report in the attachments.",
+
+  "dict_tax_by_state": {
+    "São Paulo": "0,05",
+    "Rio de Janeiro": "0,02",
+    "Minas Gerais": "0,01"
+  },
+
+"dict_position_cell" : {
+  "idVendorPositionTemplate":"B7",
+  "dateTodayPostionTemplate":"C7",
+  "vendorNamePositionTemplate":"B9",
+  "streetPositionTemplate":"B10",
+  "districtCityStatePositionTemplate":"B11",
+  "phoneNumberPostionTemplate":"B12",
+  "emailPostionTemplate":"B13",
+  "discountPostionTemplate":"G28",
+  "unitCostBrlFirstPostionTemplate":"D18",
+  "qtyFirstPostionTemplate" : "E18",
+  "termPostionTemplate":"B35",
+  "taxRatePosition": "G29"
+},
+"know_formats_dates": [
+      "%d/%m/%Y",
+      "%d-%b-%y",
+      "%m/%d/%Y"
+],
+
+"columns_to_add" :[
+  "Unit Cost (BRL)",
+  "Total Price (BRL)",
+  "Exchange Conversion Date/Time",
+  "Address",
+  "Neighborhood",
+  "Location/State",
+  "ERRORS_FOUND"
+]
+
+}

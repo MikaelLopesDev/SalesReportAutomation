@@ -1,22 +1,261 @@
 import pandas as pd
 import camelot
+import numpy as np
+from datetime import datetime, timedelta
+import requests
+import re
+from openpyxl import load_workbook
+import shutil
+import win32com.client
+from dotenv import load_dotenv
+import os
+from PyPDF2 import PdfReader, PdfWriter
+import sendEmails
+import json
+
+#start env data
+load_dotenv()
+#Read Config Variables
+with open("Data/config.json", encoding="utf-8") as config_file:
+    config = json.load(config_file)
+
+def set_pdf_password(input_pdf, output_pdf, password):
+    # read original pdf
+    reader = PdfReader(input_pdf)
+    writer = PdfWriter()
+
+    # ADD ALL PAGES TO WRITER
+    for page in reader.pages:
+        writer.add_page(page)
+
+    # Set PDF with password
+    writer.encrypt(user_password=password, owner_password=None,
+                   use_128bit=True)
+
+    # SAVE THE NEW PDF PROTECT
+    with open(output_pdf, "wb") as f:
+        writer.write(f)
 
 
-table_sales_list = camelot.read_pdf("Data/Input/Sales List.pdf")
+def verify_formate_vendor_id(vendor_id):
+    default  = r'^[A-Za-z]{2}\d{6}$'  # 2 letras + 6 números
+    return bool(re.fullmatch(default, vendor_id))
 
+def currency_convertion(id_currency):
+    url = f"http://economia.awesomeapi.com.br/json/last/{id_currency}-BRL"
+    try:
+        response = requests.get(url, timeout=10)  # Added timeout
+        response.raise_for_status()  # Raises exception for 4XX/5XX errors
+        data = response.json()
+
+        # Fixed dictionary access syntax
+        currency_key = f"{id_currency}BRL"
+        if currency_key in data:
+            return float(data[currency_key]['bid'])
+        return 0.0
+    except (requests.exceptions.RequestException, ValueError, KeyError) as e:
+        print(f"Error in currency conversion: {e}")
+        return 0.0
+
+def find_address_by_postal_code(postal_code):
+    url = f"https://viacep.com.br/ws/{postal_code}/json/"
+
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        return data
+    except (requests.exceptions.RequestException, ValueError, KeyError) as e:
+        print(f"Error in finding adress by postal code: {e}")
+        return 0
+
+
+def parse_date(date_str):
+    know_formats_dates = config["know_formats_dates"]
+
+    for fmt in know_formats_dates:
+        try:
+            parsed_date = datetime.strptime(str(date_str), fmt)
+            if parsed_date > datetime.strptime(str("01/01/2018"), fmt) and parsed_date < datetime.strptime(
+                    str("01/01/2022"), fmt):
+                return parsed_date.strftime("%d/%m/%Y")  # Correct: strftime (not strftim)
+            else:
+                return 1
+
+        except ValueError:
+            continue
+    return 0
+
+
+vba_code = """
+Sub AdjustSheetToExportAsPDF()
+    With ActiveSheet
+
+        .Cells.EntireColumn.AutoFit
+
+        .Columns("B").ColumnWidth = 48
+        .Columns("D").ColumnWidth = 18
+        .Columns("E").ColumnWidth = 6
+        .Columns("G").ColumnWidth = 20
+
+        With .PageSetup
+            .Zoom = False
+            .FitToPagesWide = 1
+            .FitToPagesTall = 1
+        End With
+    End With
+End Sub
+"""
+
+
+password_email = os.getenv("EMAIL_PASSWORD")
+email = sendEmails.EmailSender(smtp_server=config["email_smtp"],smtp_port=config["email_port"], sender_email= config["email_sender"],sender_password= password_email)
+
+dict_tax_by_state = config["dict_tax_by_state"]
+dict_position_cell = config["dict_position_cell"]
+path_report_template = config["path_report_template"]
+path_vendor_list = config["path_vendor_list"]
+path_sales_list_pdf = config["path_sales_list_pdf"]
+
+df_vendor_list = pd.read_excel(path_vendor_list)
+
+#Reading pdf
+table_sales_list = camelot.read_pdf(path_sales_list_pdf)
+
+#format table and add new columns
 df_sales_list = table_sales_list[0].df
-
 new_columns =  df_sales_list.iloc[0]
 df_sales_list = df_sales_list[1:].copy()
-
 df_sales_list.columns = new_columns
+# Define the names of the additional columns
+columns_to_add = config["columns_to_add"]
+# Add each new column to the DataFrame, initialized with NaN
+for col in columns_to_add:
+    df_sales_list[col] = np.nan
 
 
+date_invoice_30days = datetime.now() + timedelta(days=30)
 
-df_sales_list.to_excel("Data/Output/Sales List.xlsx", index=False)
+#Start check bussiness rules
+for index, row in df_sales_list.iterrows():
+    if not str(row['INVOICE']).strip().isdigit():
+        df_sales_list.at[index, 'ERRORS_FOUND'] = "Erro: Número da Fatura contém letras e deve ser apenas números"
 
-for row in df_sales_list.itertuples():
-    print(f"Essa é a linha {row.INVOICE}")
+    if parse_date(str(row['DATE']).strip()) == 0:
+        df_sales_list.at[index, 'ERRORS_FOUND'] = str(
+            df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: Número da Fatura contém data inválida"
+    elif parse_date(str(row['DATE']).strip()) == 1:
+        df_sales_list.at[index, 'ERRORS_FOUND'] = str(df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: Data fora do intervalo de 2018 a 2021"
+    else:
+        df_sales_list.at[index, 'DATE'] = parse_date(str(row['DATE']).strip())
+
+    if not verify_formate_vendor_id(str(row['VENDOR ID']).strip()):
+        df_sales_list.at[index, 'ERRORS_FOUND'] = str(
+            df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: VerdorID fora do formato AA000000"
+
+
+    if df_vendor_list.loc[df_vendor_list["Vendor ID"] == str(row['VENDOR ID']).strip(), "Status"].eq("Pending Registration").any():
+        df_sales_list.at[index, 'ERRORS_FOUND'] = str(df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: Vendor ID Possui Pending Registration"
+    identify_currency_unit_cost  = str(row['UNIT COST']).split()[1]
+    identify_currency_total_price = str(row['TOTAL PRICE']).split()[1]
+    convert_unit_cost = currency_convertion(identify_currency_unit_cost)
+    convert_total_price = currency_convertion(identify_currency_total_price)
+
+    if convert_unit_cost == 0:
+        df_sales_list.at[index, 'ERRORS_FOUND'] = str(df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: Não foi possivel converter a moeda para BRL"
+    else:
+        df_sales_list.at[index, 'Unit Cost (BRL)'] = float(str(row['UNIT COST']).split()[0])
+
+    if convert_total_price == 0:
+        df_sales_list.at[index, 'ERRORS_FOUND'] = str(df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: Não foi possivel converter a moeda para BRL"
+    else:
+        df_sales_list.at[index, 'Total Price (BRL)'] = float(str(row['TOTAL PRICE']).split()[0])
+
+    df_sales_list.at[index, 'Exchange Conversion Date/Time'] = datetime.now().strftime("%d/%m/%Y")
+
+    adresses = find_address_by_postal_code(str(row['POSTAL CODE']).strip())
+    if adresses == 0:
+        df_sales_list.at[index, 'ERRORS_FOUND'] = str(
+            df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: Não foi possivel Encontrar endereço válido para o cep"
+    else:
+        df_sales_list.at[index, 'Address'] = f"{str(adresses['logradouro'])} {str(adresses['complemento'])}"
+        df_sales_list.at[index, 'Neighborhood'] = f"{str(adresses['bairro'])}"
+        df_sales_list.at[index, 'Location/State'] = f"{str(adresses['estado'])}"
+
+
+df_sales_list_clean = df_sales_list[
+    df_sales_list['ERRORS_FOUND'].isna()]
+
+list_vendor_id = df_sales_list_clean['VENDOR ID'].unique()
+
+
+for vendor_id in list_vendor_id:
+    output_vendor_id_report = str(config["path_vendor_id_report"]).format(vendor_id)
+    shutil.copy(path_report_template, output_vendor_id_report)
+    sales_report_vendor_id = load_workbook(output_vendor_id_report)
+
+    sales_report_vendor_id_sheet = sales_report_vendor_id.active  # Pega a planilha ativa
+    df_report_by_vendor_id = df_sales_list_clean[
+        df_sales_list_clean['VENDOR ID'] == vendor_id].reset_index(drop=True)
+    total_sum_sales = df_report_by_vendor_id['Total Price (BRL)'].sum()
+    discount = float(total_sum_sales) * 0.10 if total_sum_sales > 2000000 else  0.0
+    tax = dict_tax_by_state[str(df_report_by_vendor_id['Location/State'].iloc[0])] #should added handling possible input erro
+
+
+    # Start fill cell in invoice sheet
+    sales_report_vendor_id_sheet[dict_position_cell["idVendorPositionTemplate"]] = str(df_report_by_vendor_id['VENDOR ID'].iloc[0])
+    sales_report_vendor_id_sheet[dict_position_cell["dateTodayPostionTemplate"]] = datetime.now().strftime("%d/%m/%Y")
+    sales_report_vendor_id_sheet[dict_position_cell["vendorNamePositionTemplate"]] = "Mikael Lopes"
+    sales_report_vendor_id_sheet[dict_position_cell["streetPositionTemplate"]] = str(df_report_by_vendor_id['Address'].iloc[0])
+    sales_report_vendor_id_sheet[dict_position_cell["districtCityStatePositionTemplate"]] = str(df_report_by_vendor_id['Location/State'].iloc[0])
+    sales_report_vendor_id_sheet[dict_position_cell["phoneNumberPostionTemplate"]] = "86994xxxx92"
+    sales_report_vendor_id_sheet[dict_position_cell["emailPostionTemplate"]] = "mikaelslopesit@gmail.com"
+    sales_report_vendor_id_sheet[dict_position_cell["discountPostionTemplate"]] =  discount
+    sales_report_vendor_id_sheet[dict_position_cell["termPostionTemplate"]] = f"Please, Generate Invoices by {date_invoice_30days.strftime('%d/%m/%Y')}"
+    sales_report_vendor_id_sheet[dict_position_cell["taxRatePosition"]] = tax
+
+
+    start_index_row_costbrl_and_quant  = int(dict_position_cell["unitCostBrlFirstPostionTemplate"][1:])
+    start_colum_unit_costbrl = str(dict_position_cell["unitCostBrlFirstPostionTemplate"])[0]
+    start_colum_quant = str(dict_position_cell["qtyFirstPostionTemplate"])[0]
+    for index, row in df_report_by_vendor_id.iterrows():
+        sales_report_vendor_id_sheet[f"{start_colum_unit_costbrl}{start_index_row_costbrl_and_quant+index}"] = round(float(row['Unit Cost (BRL)']),2)
+        sales_report_vendor_id_sheet[f"{start_colum_quant}{start_index_row_costbrl_and_quant+index}"] = round(float(row['QTY']),2)
+
+    sales_report_vendor_id.save(output_vendor_id_report)
+
+    path_pdf_without_password = output_vendor_id_report.replace(".xlsx","temp.pdf")
+    path_pdf_with_password = output_vendor_id_report.replace(".xlsx", ".pdf")
+    #Create PDF File
+    excel = win32com.client.Dispatch("Excel.Application")
+    excel.Visible = False  # Execute in second plan
+    workbook = excel.Workbooks.Open(os.path.abspath(output_vendor_id_report))
+    vba_module = workbook.VBProject.VBComponents.Add(1)  # 1 = Módulo padrão
+    vba_module.CodeModule.AddFromString(vba_code)
+    excel.Application.Run("AdjustSheetToExportAsPDF")
+    workbook.ExportAsFixedFormat(0, os.path.abspath(path_pdf_without_password))  # 0 = PDF
+    workbook.Close(SaveChanges=True)
+    excel.Quit()
+    set_pdf_password(path_pdf_without_password,path_pdf_with_password,re.sub(r'\D', '', vendor_id))
+    email.add_attachment(path_pdf_with_password)
+
+
+#create report with errors
+df_valid_errors = df_sales_list[
+    df_sales_list['ERRORS_FOUND'].notna() &
+    (df_sales_list['ERRORS_FOUND'].str.strip() != '')
+]
+df_valid_errors.to_excel(config["path_report_errors_found"], index=False)
+
+
+email.add_attachment(config["path_report_errors_found"])
+email.send_email(
+        recipient_email= config["email_recipient"],
+        subject= config["email_subject"],
+        body= config["email_body"],
+    )
+
 
 
 
