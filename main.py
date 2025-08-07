@@ -3,7 +3,6 @@ import camelot
 import numpy as np
 from datetime import datetime, timedelta
 import requests
-from decimal import Decimal, ROUND_HALF_UP
 import re
 from openpyxl import load_workbook
 import shutil
@@ -12,6 +11,13 @@ from dotenv import load_dotenv
 import os
 from PyPDF2 import PdfReader, PdfWriter
 import sendEmails
+import json
+
+#start env data
+load_dotenv()
+#Read Config Variables
+with open("Data/config.json", encoding="utf-8") as config_file:
+    config = json.load(config_file)
 
 def set_pdf_password(input_pdf, output_pdf, password):
     # read original pdf
@@ -45,7 +51,7 @@ def currency_convertion(id_currency):
         # Fixed dictionary access syntax
         currency_key = f"{id_currency}BRL"
         if currency_key in data:
-            return Decimal(data[currency_key]['bid'])
+            return float(data[currency_key]['bid'])
         return 0.0
     except (requests.exceptions.RequestException, ValueError, KeyError) as e:
         print(f"Error in currency conversion: {e}")
@@ -66,11 +72,7 @@ def find_address_by_postal_code(postal_code):
 
 
 def parse_date(date_str):
-    know_formats_dates = [
-        "%d/%m/%Y",  # dd/MM/yyyy
-        "%d-%b-%y",  # dd-MMM-yy (e.g., "15-Jan-23")
-        "%m/%d/%Y",  # MM/dd/yyyy
-    ]
+    know_formats_dates = config["know_formats_dates"]
 
     for fmt in know_formats_dates:
         try:
@@ -84,6 +86,7 @@ def parse_date(date_str):
         except ValueError:
             continue
     return 0
+
 
 vba_code = """
 Sub AdjustSheetToExportAsPDF()
@@ -105,57 +108,36 @@ Sub AdjustSheetToExportAsPDF()
 End Sub
 """
 
-dict_tax_by_state = {
-    "São Paulo": "0,05",
-    "Rio de Janeiro": "0,02",
-    "Minas Gerais": "0,01"
 
-
-}
-
-dict_position_cell = {
-    "idVendorPositionTemplate":"B7",
-    "dateTodayPostionTemplate":"C7",
-    "vendorNamePositionTemplate":"B9",
-    "streetPositionTemplate":"B10",
-    "districtCityStatePositionTemplate":"B11",
-    "phoneNumberPostionTemplate":"B12",
-    "emailPostionTemplate":"B13",
-    "discountPostionTemplate":"G28",
-    "unitCostBrlFirstPostionTemplate":"D18",
-    "qtyFirstPostionTemplate" : "E18",
-    "termPostionTemplate":"B35",
-    "taxRatePosition": "G29"
-}
-
-# Define the names of the additional columns
-columns_to_add = [
-    'Unit Cost (BRL)',
-    'Total Price (BRL)',
-    'Exchange Conversion Date/Time',
-    'Address',
-    'Neighborhood',
-    'Location/State',
-    'ERRORS_FOUND'
-]
-
-load_dotenv()
 password_email = os.getenv("EMAIL_PASSWORD")
-email = sendEmails.EmailSender(smtp_server="smtp.gmail.com",smtp_port=587, sender_email="mikaellopes777@gmail.com",sender_password= password_email)
-path_report_template = "Data/Input/Sales Report_Template.xlsx"
-df_vendor_list = pd.read_excel("Data/Input/Vendor List.xlsx")
+email = sendEmails.EmailSender(smtp_server=config["email_smtp"],smtp_port=config["email_port"], sender_email= config["email_sender"],sender_password= password_email)
 
-table_sales_list = camelot.read_pdf("Data/Input/Sales List.pdf")
+dict_tax_by_state = config["dict_tax_by_state"]
+dict_position_cell = config["dict_position_cell"]
+path_report_template = config["path_report_template"]
+path_vendor_list = config["path_vendor_list"]
+path_sales_list_pdf = config["path_sales_list_pdf"]
+
+df_vendor_list = pd.read_excel(path_vendor_list)
+
+#Reading pdf
+table_sales_list = camelot.read_pdf(path_sales_list_pdf)
+
+#format table and add new columns
 df_sales_list = table_sales_list[0].df
 new_columns =  df_sales_list.iloc[0]
 df_sales_list = df_sales_list[1:].copy()
 df_sales_list.columns = new_columns
-date_invoice_30days = datetime.now() + timedelta(days=30)
+# Define the names of the additional columns
+columns_to_add = config["columns_to_add"]
 # Add each new column to the DataFrame, initialized with NaN
 for col in columns_to_add:
     df_sales_list[col] = np.nan
 
 
+date_invoice_30days = datetime.now() + timedelta(days=30)
+
+#Start check bussiness rules
 for index, row in df_sales_list.iterrows():
     if not str(row['INVOICE']).strip().isdigit():
         df_sales_list.at[index, 'ERRORS_FOUND'] = "Erro: Número da Fatura contém letras e deve ser apenas números"
@@ -183,12 +165,12 @@ for index, row in df_sales_list.iterrows():
     if convert_unit_cost == 0:
         df_sales_list.at[index, 'ERRORS_FOUND'] = str(df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: Não foi possivel converter a moeda para BRL"
     else:
-        df_sales_list.at[index, 'Unit Cost (BRL)'] = Decimal(str(row['UNIT COST']).split()[0])
+        df_sales_list.at[index, 'Unit Cost (BRL)'] = float(str(row['UNIT COST']).split()[0])
 
     if convert_total_price == 0:
         df_sales_list.at[index, 'ERRORS_FOUND'] = str(df_sales_list.at[index, 'ERRORS_FOUND']) + "; " + "Erro: Não foi possivel converter a moeda para BRL"
     else:
-        df_sales_list.at[index, 'Total Price (BRL)'] = Decimal(str(row['TOTAL PRICE']).split()[0])
+        df_sales_list.at[index, 'Total Price (BRL)'] = float(str(row['TOTAL PRICE']).split()[0])
 
     df_sales_list.at[index, 'Exchange Conversion Date/Time'] = datetime.now().strftime("%d/%m/%Y")
 
@@ -208,10 +190,8 @@ df_sales_list_clean = df_sales_list[
 list_vendor_id = df_sales_list_clean['VENDOR ID'].unique()
 
 
-
-
 for vendor_id in list_vendor_id:
-    output_vendor_id_report = f"Data/Output/{vendor_id}.xlsx"
+    output_vendor_id_report = str(config["path_vendor_id_report"]).format(vendor_id)
     shutil.copy(path_report_template, output_vendor_id_report)
     sales_report_vendor_id = load_workbook(output_vendor_id_report)
 
@@ -261,22 +241,19 @@ for vendor_id in list_vendor_id:
     email.add_attachment(path_pdf_with_password)
 
 
-df_sales_list.to_excel("Data/Output/Sales List.xlsx", index=False)
-
+#create report with errors
 df_valid_errors = df_sales_list[
     df_sales_list['ERRORS_FOUND'].notna() &
     (df_sales_list['ERRORS_FOUND'].str.strip() != '')
 ]
+df_valid_errors.to_excel(config["path_report_errors_found"], index=False)
 
 
-df_valid_errors.to_excel("Data/Output/Errors Found.xlsx", index=False)
-email.add_attachment("Data/Output/Errors Found.xlsx")
-
-
+email.add_attachment(config["path_report_errors_found"])
 email.send_email(
-        recipient_email="mikaelslopesit@gmail.com",
-        subject="Relatório Mensal",
-        body="Follow the invoices and report in the attachments.",
+        recipient_email= config["email_recipient"],
+        subject= config["email_subject"],
+        body= config["email_body"],
     )
 
 
